@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import threading
+from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from random import randint
 
@@ -136,18 +137,13 @@ class DataSetCreator:
 
         return selected_boxes
 
-    def process_screenshot(self, kwargs):
+    def process_screenshot(self, screenshot_name):
         """
         Обработка одного скриншота: поиск объектов, применение NMS и сохранение результатов.
 
         :param kwargs: информация об обрабатываемом скриншоте.
         """
 
-        screenshot_name = kwargs["screenshot_name"]
-        num = kwargs["num"]
-
-        thread_name = threading.current_thread().name
-        print(f"[{thread_name}] обработка скриншота №{num}")
         screenshot_path = os.path.join(self.SCREENSHOTS_DIR, screenshot_name)
         screenshot = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
 
@@ -217,20 +213,16 @@ class DataSetCreator:
 
         # Создаем пул потоков
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            futures = []
+            futures = [executor.submit(self.process_screenshot, name) for name in screenshots]
 
-            for num, screenshot_name in enumerate(screenshots):
-                kwargs = {'screenshot_name': screenshot_name, 'num': num}
-                futures.append(executor.submit(self.process_screenshot, kwargs))
-
-            # Ожидаем завершения всех задач
-            for future in as_completed(futures):
+            # Используем tqdm для отображения прогресса
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Обработка"):
                 try:
-                    future.result()  # Проверяем на ошибки
+                    future.result()
                 except Exception as e:
-                    print(f"Ошибка при обработке: {e}")
+                    print(f"\nОшибка при обработке: {e}")
 
-        print("Разметка завершена!")
+        print("\nРазметка завершена!")
 
 
 # Создаем экземпляр класса и запускаем обработку
