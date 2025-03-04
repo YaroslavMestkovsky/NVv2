@@ -3,3 +3,4 @@ ultralytics
 mss
 pandas
 numpy
+pywin32
