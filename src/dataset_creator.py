@@ -2,11 +2,15 @@ import os
 import cv2
 import numpy as np
 
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+)
 from random import randint
 
 
 class DataSetCreator:
-    def __init__(self, screenshots_dir, templates_dir, output_dir, examples_dir, class_id):
+    def __init__(self, screenshots_dir, templates_dir, output_dir, examples_dir, class_id, num_threads=4):
         # Папка с полноразмерными скриншотами
         self.SCREENSHOTS_DIR = screenshots_dir
         # Папка с шаблонами
@@ -20,6 +24,8 @@ class DataSetCreator:
         # ID класса объекта
         self.THRESHOLD = 0.75
         self.NMS_THRESHOLD = 0.5
+        # Количество потоков
+        self.num_threads = num_threads
 
         self.amount = len(os.listdir(self.SCREENSHOTS_DIR))
         self._init_templates()
@@ -91,75 +97,95 @@ class DataSetCreator:
 
         return intersection / union if union > 0 else 0
 
+    def process_screenshot(self, screenshot_name):
+        screenshot_path = os.path.join(self.SCREENSHOTS_DIR, screenshot_name)
+        screenshot = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+
+        if screenshot is None:
+            print(f"Ошибка загрузки скриншота: {screenshot_path}")
+            return
+
+        img_height, img_width = screenshot.shape[:2]
+        all_boxes = []  # Все bounding box'ы
+        all_scores = []  # Confidence scores для всех bounding box'ов
+
+        # Копия скриншота для рисования bounding box'ов
+        annotated_image = screenshot.copy()
+
+        for template, (h, w) in self.templates:
+            result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+            locations = np.where(result >= self.THRESHOLD)
+
+            for pt in zip(*locations[::-1]):
+                x1, y1 = pt
+                x2, y2 = x1 + w, y1 + h
+                all_boxes.append((x1, y1, x2, y2))
+                all_scores.append(result[pt[1], pt[0]])  # Confidence score
+
+        # Применение NMS
+        if all_boxes:
+            filtered_boxes = self.non_max_suppression(all_boxes, all_scores, self.NMS_THRESHOLD)
+
+            annotations = []
+            for box in filtered_boxes:
+                x1, y1, x2, y2 = box
+                w, h = x2 - x1, y2 - y1
+                bbox = (x1, y1, w, h)
+                normalized_bbox = self.normalize_bbox(bbox, img_width, img_height)
+                annotations.append(normalized_bbox)
+
+                # Рисование bounding box'а
+                cv2.rectangle(
+                    annotated_image,
+                    (x1, y1),
+                    (x2, y2),
+                    (randint(0, 255), randint(0, 255), randint(0, 255)),
+                    2,
+                )
+
+            # Сохранение аннотаций
+            base_name = os.path.splitext(screenshot_name)[0]
+            label_path = os.path.join(self.OUTPUT_DIR, "labels", f"{base_name}.txt")
+            with open(label_path, "w") as f:
+                f.write("\n".join(annotations))
+
+            # Копирование скриншота в папку images
+            output_image_path = os.path.join(self.OUTPUT_DIR, "images", screenshot_name)
+            cv2.imwrite(output_image_path, screenshot)
+
+            # Сохранение примера с bounding box'ами
+            example_path = os.path.join(self.EXAMPLES_DIR, screenshot_name)
+            cv2.imwrite(example_path, annotated_image)
+
     def run(self):
-        for num, screenshot_name in enumerate(os.listdir(self.SCREENSHOTS_DIR)):
-            if num == 21: break
-            print(f'Обработка: {num + 1}/{self.amount}')
-            screenshot_path = os.path.join(self.SCREENSHOTS_DIR, screenshot_name)
-            screenshot = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
+        # Получаем список всех скриншотов
+        screenshots = os.listdir(self.SCREENSHOTS_DIR)
 
-            if screenshot is None:
-                print(f"Ошибка загрузки скриншота: {screenshot_path}")
-                continue
+        # Создаем пул потоков
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = []
 
-            img_height, img_width = screenshot.shape[:2]
-            all_boxes = []  # Все bounding box'ы
-            all_scores = []  # Confidence scores для всех bounding box'ов
+            for num, screenshot_name in enumerate(screenshots):
+                print(f'Запуск обработки: {num + 1}/{self.amount}')
+                futures.append(executor.submit(self.process_screenshot, screenshot_name))
 
-            # Копия скриншота для рисования bounding box'ов
-            annotated_image = screenshot.copy()
+            # Ожидаем завершения всех задач
+            for future in as_completed(futures):
+                try:
+                    future.result()  # Проверяем на ошибки
+                except Exception as e:
+                    print(f"Ошибка при обработке: {e}")
 
-            for template, (h, w) in self.templates:
-                result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
-                locations = np.where(result >= self.THRESHOLD)
-
-                for pt in zip(*locations[::-1]):
-                    x1, y1 = pt
-                    x2, y2 = x1 + w, y1 + h
-                    all_boxes.append((x1, y1, x2, y2))
-                    all_scores.append(result[pt[1], pt[0]])  # Confidence score
-
-            # Применение NMS
-            if all_boxes:
-                filtered_boxes = self.non_max_suppression(all_boxes, all_scores, self.NMS_THRESHOLD)
-
-                annotations = []
-                for box in filtered_boxes:
-                    x1, y1, x2, y2 = box
-                    w, h = x2 - x1, y2 - y1
-                    bbox = (x1, y1, w, h)
-                    normalized_bbox = self.normalize_bbox(bbox, img_width, img_height)
-                    annotations.append(normalized_bbox)
-
-                    # Рисование bounding box'а
-                    cv2.rectangle(
-                        annotated_image,
-                        (x1, y1),
-                        (x2, y2),
-                        (randint(0, 255), randint(0, 255), randint(0, 255)),
-                        2,
-                    )
-
-                # Сохранение аннотаций
-                base_name = os.path.splitext(screenshot_name)[0]
-                label_path = os.path.join(self.OUTPUT_DIR, "labels", f"{base_name}.txt")
-                with open(label_path, "w") as f:
-                    f.write("\n".join(annotations))
-
-                # Копирование скриншота в папку images
-                output_image_path = os.path.join(self.OUTPUT_DIR, "images", screenshot_name)
-                cv2.imwrite(output_image_path, screenshot)
-
-                # Сохранение примера с bounding box'ами
-                example_path = os.path.join(self.EXAMPLES_DIR, screenshot_name)
-                cv2.imwrite(example_path, annotated_image)
+        print("Разметка завершена!")
 
 
+# Создаем экземпляр класса и запускаем обработку
 creator = DataSetCreator(
     screenshots_dir="raw_data/fairy_fbS",
     templates_dir="templates/fairy_fbS",
     output_dir="../data/fairy_fbS",
     examples_dir="examples",
     class_id=0,
+    num_threads=8,  # Укажите количество потоков
 )
 creator.run()
