@@ -237,7 +237,7 @@ class DataSetCreator:
 creator = DataSetCreator(
     screenshots_dir="raw_data/fairy_fbS",
     templates_dir="templates/fairy_fbS",
-    output_dir="../data/fairy_fbS",
+    output_dir="../data/marked_up_data/fairy_fbS",
     examples_dir="examples",
     class_id=0,
     num_threads=5,  # Укажите количество потоков
