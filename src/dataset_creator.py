@@ -135,7 +135,7 @@ hwnd = find_game_window(game_title)
 # Создание экземпляра класса и запуск захвата скриншотов
 screenshotter = DatasetCreator(
     hwnd=hwnd,
-    output_dir="raw_data/fairy_fbS",
+    output_dir="../data/marked_up_data/fairy_fbS/raw_data/fairy_fbS",
     target_size=(1280, 1280),
     interval=0.3,
 )

@@ -28,7 +28,7 @@ class DataSetMarkuper:
         self.OUTPUT_DIR = output_dir
         self.EXAMPLES_DIR = os.path.join(self.OUTPUT_DIR, examples_dir)
         self.CLASS_ID = class_id
-        self.THRESHOLD = 0.75
+        self.THRESHOLD = 0.6
         self.NMS_THRESHOLD = 0.5
         self.num_threads = num_threads
 
@@ -147,7 +147,7 @@ class DataSetMarkuper:
         screenshot = cv2.imread(screenshot_path, cv2.IMREAD_COLOR)
 
         if screenshot is None:
-            print(f"Ошибка загрузки скриншота: {screenshot_path}")
+            print(f"\nОшибка загрузки скриншота: {screenshot_path}")
             return
 
         img_height, img_width = screenshot.shape[:2]
@@ -226,7 +226,7 @@ class DataSetMarkuper:
 
 # Создаем экземпляр класса и запускаем обработку
 markuper = DataSetMarkuper(
-    screenshots_dir="raw_data/fairy_fbS",
+    screenshots_dir="../data/marked_up_data/fairy_fbS/raw_data/fairy_fbS",
     templates_dir="templates/fairy_fbS",
     output_dir="../data/marked_up_data/fairy_fbS",
     examples_dir="examples",

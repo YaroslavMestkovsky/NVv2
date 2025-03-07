@@ -4,3 +4,5 @@ mss
 pandas
 numpy
 pywin32
+scikit-learn
+albumentations
