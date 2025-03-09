@@ -1,3 +1,5 @@
 /.idea
-/src/templates/
 /data/marked_up_data/
+/models/runs/
+*.pt
+*.yaml

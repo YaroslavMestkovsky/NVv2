@@ -2,7 +2,7 @@ PyQt6
 ultralytics
 mss
 pandas
-numpy
+numpy<2
 pywin32
 scikit-learn
 albumentations
